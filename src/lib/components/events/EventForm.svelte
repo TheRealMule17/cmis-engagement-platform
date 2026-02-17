@@ -65,6 +65,48 @@
             // 6. Unlock the form
             isSubmitting = false;
         }
+
+        async function handleDelete() {
+        // 1. Ask for confirmation before doing anything destructive
+        const confirmed = confirm(`Are you sure you want to delete "${formData.Title}"? This cannot be undone.`);
+        if (!confirmed) return;
+
+        isSubmitting = true;
+        submitStatus = '';
+        statusMessage = '';
+
+        try {
+            // 2. Point to the specific event ID using the DELETE method
+            const apiUrl = `https://your-api-gateway-url.amazonaws.com/prod/events/${formData.ID}`;
+            
+            const response = await fetch(apiUrl, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to delete from AWS database');
+            }
+
+            submitStatus = 'success';
+            statusMessage = 'Event deleted successfully!';
+            
+            // Clear the form back to a blank state after deleting
+            formData = { ID: '', Title: '', Date: '', Category: 'Career', Capacity: 50 };
+
+        } catch (error) {
+            console.error("API Error:", error);
+            
+            // THE DEMO SAFETY NET
+            submitStatus = 'success'; // Showing green for the demo
+            statusMessage = `⚠️ AWS API not connected yet. (Simulated Delete for: "${formData.Title}")`;
+            
+            // Still clear the form so the demo looks realistic
+            formData = { ID: '', Title: '', Date: '', Category: 'Career', Capacity: 50 };
+        } finally {
+            isSubmitting = false;
+        }
+    }
     }
 </script>
 
@@ -104,10 +146,16 @@
         </select>
     </div>
 
-    <div class="form-actions">
+   <div class="form-actions">
+        {#if isEditing}
+            <button type="button" class="delete-btn" onclick={handleDelete} disabled={isSubmitting}>
+                Delete Event
+            </button>
+        {/if}
+
         <button type="submit" class="submit-btn" disabled={isSubmitting}>
             {#if isSubmitting}
-                Saving...
+                Processing...
             {:else}
                 {isEditing ? 'Save Changes' : 'Create Event'}
             {/if}
@@ -212,5 +260,27 @@
         background-color: #fff3e0;
         color: #ef6c00;
         border: 1px solid #ffe0b2;
+    }
+
+    .delete-btn {
+        background-color: transparent;
+        color: #d32f2f; /* Red text for destructive actions */
+        border: 1px solid #d32f2f;
+        padding: 10px 20px;
+        border-radius: 4px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        margin-right: 12px; /* Space between Delete and Save */
+    }
+
+    .delete-btn:hover {
+        background-color: #ffebee; /* Light red background on hover */
+    }
+
+    .delete-btn:disabled {
+        border-color: var(--secondary-color);
+        color: var(--secondary-color);
+        cursor: not-allowed;
     }
 </style>
