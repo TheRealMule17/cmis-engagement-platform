@@ -10,15 +10,7 @@
     };
 
     let formData = { ...initialData };
-    
-    // Fix date format for input=date (needs YYYY-MM-DD, but we might get ISO)
-    if (formData.dateTime && formData.dateTime.includes('T')) {
-        formData.dateTime = formData.dateTime.split('T')[0];
-    }
-
-    $: isEditing = formData.eventId !== '';
-
-    // NEW: State variables to manage the AWS interaction
+     // NEW: State variables to manage the AWS interaction
     let isSubmitting = false;
     let submitStatus = ''; // Will be 'success' or 'error'
     let statusMessage = '';
@@ -30,6 +22,13 @@
         category: '',
         capacity: ''
     };
+    
+    // Fix date format for input=date (needs YYYY-MM-DD, but we might get ISO)
+    if (formData.dateTime && formData.dateTime.includes('T')) {
+        formData.dateTime = formData.dateTime.split('T')[0];
+    }
+
+    $: isEditing = formData.eventId !== '';
 
     function validateForm() {
         let isValid = true;
