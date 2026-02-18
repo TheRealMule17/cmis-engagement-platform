@@ -5,8 +5,6 @@
     // NEW: Local state for UI simulation
     import { API_ENDPOINTS } from '$lib/config';
 
-    // This tells the component to expect an object called "event" to be passed into it
-    export let event;
     // NEW: Callback to refresh parent component after successful RSVP
     export let onRsvpSuccess = null;
     
