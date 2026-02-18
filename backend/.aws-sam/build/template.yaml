@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS SAM template for CMIS Event Management System
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: nodejs18.x
+    Architectures:
+    - x86_64
+Resources:
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Fn::Sub: CMIS-Events-${AWS::StackName}
+      AttributeDefinitions:
+      - AttributeName: EventID
+        AttributeType: S
+      KeySchema:
+      - AttributeName: EventID
+        KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+      - Key: Project
+        Value: CMIS
+      - Key: Team
+        Value: 12thMan
+  RSVPsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Fn::Sub: CMIS-RSVPs-${AWS::StackName}
+      AttributeDefinitions:
+      - AttributeName: EventID
+        AttributeType: S
+      - AttributeName: UserID
+        AttributeType: S
+      KeySchema:
+      - AttributeName: EventID
+        KeyType: HASH
+      - AttributeName: UserID
+        KeyType: RANGE
+      GlobalSecondaryIndexes:
+      - IndexName: UserID-index
+        KeySchema:
+        - AttributeName: UserID
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+      - Key: Project
+        Value: CMIS
+      - Key: Team
+        Value: 12thMan
+  CMISEventsAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: CMISEventsAPI
+      StageName: prod
+      Cors:
+        AllowOrigin: '''*'''
+        AllowHeaders: '''Content-Type,Authorization'''
+        AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS'''
+      Auth:
+        DefaultAuthorizer: NONE
+  GetEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/getEvents.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME:
+            Ref: EventsTable
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: EventsTable
+      Events:
+        GetEvents:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: CMISEventsAPI
+            Path: /events
+            Method: GET
+      CodeUri: GetEventsFunction
+    Metadata:
+      SamResourceId: GetEventsFunction
+  CreateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/createEvent.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME:
+            Ref: EventsTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EventsTable
+      Events:
+        CreateEvent:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: CMISEventsAPI
+            Path: /events
+            Method: POST
+      CodeUri: CreateEventFunction
+    Metadata:
+      SamResourceId: CreateEventFunction
+  GetEventByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/getEventById.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME:
+            Ref: EventsTable
+          RSVPS_TABLE_NAME:
+            Ref: RSVPsTable
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: EventsTable
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: RSVPsTable
+      Events:
+        GetEventById:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: CMISEventsAPI
+            Path: /events/{id}
+            Method: GET
+      CodeUri: GetEventByIdFunction
+    Metadata:
+      SamResourceId: GetEventByIdFunction
+  UpdateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/updateEvent.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME:
+            Ref: EventsTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EventsTable
+      Events:
+        UpdateEvent:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: CMISEventsAPI
+            Path: /events/{id}
+            Method: PUT
+      CodeUri: UpdateEventFunction
+    Metadata:
+      SamResourceId: UpdateEventFunction
+  DeleteEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/deleteEvent.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME:
+            Ref: EventsTable
+          RSVPS_TABLE_NAME:
+            Ref: RSVPsTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EventsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: RSVPsTable
+      Events:
+        DeleteEvent:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: CMISEventsAPI
+            Path: /events/{id}
+            Method: DELETE
+      CodeUri: DeleteEventFunction
+    Metadata:
+      SamResourceId: DeleteEventFunction
+  RsvpEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/rsvpEvent.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME:
+            Ref: EventsTable
+          RSVPS_TABLE_NAME:
+            Ref: RSVPsTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EventsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: RSVPsTable
+      Events:
+        RsvpEvent:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: CMISEventsAPI
+            Path: /events/{id}/rsvp
+            Method: POST
+      CodeUri: RsvpEventFunction
+    Metadata:
+      SamResourceId: RsvpEventFunction
+  CancelRsvpFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/cancelRsvp.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME:
+            Ref: EventsTable
+          RSVPS_TABLE_NAME:
+            Ref: RSVPsTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EventsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: RSVPsTable
+      Events:
+        CancelRsvp:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: CMISEventsAPI
+            Path: /events/{id}/rsvp
+            Method: DELETE
+      CodeUri: CancelRsvpFunction
+    Metadata:
+      SamResourceId: CancelRsvpFunction
+Outputs:
+  ApiGatewayUrl:
+    Description: API Gateway URL for Prod Stage
+    Value:
+      Fn::Sub: https://${CMISEventsAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/
+  EventsTableName:
+    Description: Name of the Events DynamoDB table
+    Value:
+      Ref: EventsTable
+  RSVPsTableName:
+    Description: Name of the RSVPs DynamoDB table
+    Value:
+      Ref: RSVPsTable
