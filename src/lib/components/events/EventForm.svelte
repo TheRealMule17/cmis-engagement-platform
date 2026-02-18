@@ -1,33 +1,139 @@
 <script>
+    import { API_ENDPOINTS } from '$lib/config';
+
     export let initialData = {
-        ID: '',
-        Title: '',
-        Date: '',
-        Category: 'Career',
-        Capacity: 50
+        eventId: '',
+        title: '',
+        dateTime: '',
+        category: 'Career',
+        capacity: 50
     };
 
     let formData = { ...initialData };
-    $: isEditing = formData.ID !== '';
+    
+    // Fix date format for input=date (needs YYYY-MM-DD, but we might get ISO)
+    if (formData.dateTime && formData.dateTime.includes('T')) {
+        formData.dateTime = formData.dateTime.split('T')[0];
+    }
+
+    $: isEditing = formData.eventId !== '';
 
     // NEW: State variables to manage the AWS interaction
     let isSubmitting = false;
     let submitStatus = ''; // Will be 'success' or 'error'
     let statusMessage = '';
+    
+    // NEW: Validation state
+    let validationErrors = {
+        title: '',
+        dateTime: '',
+        category: '',
+        capacity: ''
+    };
+
+    function validateForm() {
+        let isValid = true;
+        const errors = {
+            title: '',
+            dateTime: '',
+            category: '',
+            capacity: ''
+        };
+
+        // 1. Title Validation
+        if (!formData.title || formData.title.trim() === '') {
+            errors.title = 'Title is required.';
+            isValid = false;
+        } else if (formData.title.length < 3) {
+            errors.title = 'Title must be at least 3 characters.';
+            isValid = false;
+        } else if (formData.title.length > 200) {
+            errors.title = 'Title cannot exceed 200 characters.';
+            isValid = false;
+        }
+
+        // 2. Date Validation
+        if (!formData.dateTime) {
+            errors.dateTime = 'Date is required.';
+            isValid = false;
+        } else {
+            const selectedDate = new Date(formData.dateTime);
+            const now = new Date();
+            // Reset time part of "now" to compare dates correctly if we only care about day
+            // But requirement says "future (after current date/time)". 
+            // Since input=date only gives YYYY-MM-DD, we treat it as 00:00 UTC or local.
+            // Let's just compare the date string to today's date string for simplicity, or strict future.
+            // Strict future check:
+            if (selectedDate < now) {
+                // Allow today? User said "after current date/time". 
+                // Since we default to 18:00:00Z when sending, let's just check if the day is in the past.
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (selectedDate < today) {
+                    errors.dateTime = 'Date must be in the future.';
+                    isValid = false;
+                }
+            }
+        }
+
+        // 3. Category Validation
+        const validCategories = ['Career', 'Networking', 'Social', 'Mentorship'];
+        if (!formData.category) {
+            errors.category = 'Category is required.';
+            isValid = false;
+        } else if (!validCategories.includes(formData.category)) {
+            errors.category = 'Invalid category selected.';
+            isValid = false;
+        }
+
+        // 4. Capacity Validation
+        if (!formData.capacity) {
+            errors.capacity = 'Capacity is required.';
+            isValid = false;
+        } else {
+            const cap = Number(formData.capacity);
+            if (!Number.isInteger(cap) || cap < 1) {
+                errors.capacity = 'Capacity must be at least 1.';
+                isValid = false;
+            } else if (cap > 1000) {
+                errors.capacity = 'Capacity cannot exceed 1000.';
+                isValid = false;
+            }
+        }
+
+        validationErrors = errors;
+        return isValid;
+    }
+
+    function clearError(field) {
+        validationErrors[field] = '';
+    }
 
     async function handleSubmit(event) {
         event.preventDefault(); // Prevent page refresh
         
+        // 0. Validate before proceeding
+        if (!validateForm()) {
+            return;
+        }
+
         // 1. Lock the form while we talk to AWS
         isSubmitting = true;
         submitStatus = '';
         statusMessage = '';
 
         try {
+            // Prepare payload with ISO date
+            const payload = { ...formData };
+            if (payload.dateTime && !payload.dateTime.includes('T')) {
+                // Append a default time if it's just a date string
+                payload.dateTime = `${payload.dateTime}T18:00:00Z`;
+            }
+
             // 2. Set up the exact API route and method based on Create vs. Edit
             const apiUrl = isEditing 
-                ? `https://your-api-gateway-url.amazonaws.com/prod/events/${formData.ID}` // Update specific event
-                : `https://your-api-gateway-url.amazonaws.com/prod/events`;              // Create new event
+                ? API_ENDPOINTS.eventById(formData.eventId) // Update specific event
+                : API_ENDPOINTS.events;              // Create new event
             
             const method = isEditing ? 'PUT' : 'POST';
 
@@ -37,7 +143,7 @@
                 headers: {
                     'Content-Type': 'application/json' // Tell AWS we are sending JSON data
                 },
-                body: JSON.stringify(formData) // Convert our Svelte object into a JSON string
+                body: JSON.stringify(payload) // Convert our Svelte object into a JSON string
             });
 
             if (!response.ok) {
@@ -50,7 +156,7 @@
             
             // If it was a new event, clear the form so they can make another one
             if (!isEditing) {
-                formData = { ID: '', Title: '', Date: '', Category: 'Career', Capacity: 50 };
+                formData = { eventId: '', title: '', dateTime: '', category: 'Career', capacity: 50 };
             }
 
         } catch (error) {
@@ -60,15 +166,16 @@
             // Because your API URL is fake right now, the fetch will purposely fail. 
             // We catch it here to show a mock success message for your Phase 1 demo!
             submitStatus = 'error';
-            statusMessage = `⚠️ AWS API not connected yet. (Simulated ${isEditing ? 'Update' : 'Create'} for: "${formData.Title}")`;
+            statusMessage = `⚠️ AWS API not connected yet. (Simulated ${isEditing ? 'Update' : 'Create'} for: "${formData.title}")`;
         } finally {
             // 6. Unlock the form
             isSubmitting = false;
         }
+    }
 
-        async function handleDelete() {
+    async function handleDelete() {
         // 1. Ask for confirmation before doing anything destructive
-        const confirmed = confirm(`Are you sure you want to delete "${formData.Title}"? This cannot be undone.`);
+        const confirmed = confirm(`Are you sure you want to delete "${formData.title}"? This cannot be undone.`);
         if (!confirmed) return;
 
         isSubmitting = true;
@@ -77,7 +184,7 @@
 
         try {
             // 2. Point to the specific event ID using the DELETE method
-            const apiUrl = `https://your-api-gateway-url.amazonaws.com/prod/events/${formData.ID}`;
+            const apiUrl = API_ENDPOINTS.eventById(formData.eventId);
             
             const response = await fetch(apiUrl, {
                 method: 'DELETE',
@@ -92,21 +199,20 @@
             statusMessage = 'Event deleted successfully!';
             
             // Clear the form back to a blank state after deleting
-            formData = { ID: '', Title: '', Date: '', Category: 'Career', Capacity: 50 };
+            formData = { eventId: '', title: '', dateTime: '', category: 'Career', capacity: 50 };
 
         } catch (error) {
             console.error("API Error:", error);
             
             // THE DEMO SAFETY NET
             submitStatus = 'success'; // Showing green for the demo
-            statusMessage = `⚠️ AWS API not connected yet. (Simulated Delete for: "${formData.Title}")`;
+            statusMessage = `⚠️ AWS API not connected yet. (Simulated Delete for: "${formData.title}")`;
             
             // Still clear the form so the demo looks realistic
-            formData = { ID: '', Title: '', Date: '', Category: 'Career', Capacity: 50 };
+            formData = { eventId: '', title: '', dateTime: '', category: 'Career', capacity: 50 };
         } finally {
             isSubmitting = false;
         }
-    }
     }
 </script>
 
@@ -121,29 +227,73 @@
 
     <div class="form-group">
         <label for="title">Event Title</label>
-        <input type="text" id="title" bind:value={formData.Title} required placeholder="e.g. Fall Case Competition" disabled={isSubmitting} />
+        <input 
+            type="text" 
+            id="title" 
+            bind:value={formData.title} 
+            required 
+            placeholder="e.g. Fall Case Competition" 
+            disabled={isSubmitting} 
+            oninput={() => clearError('title')}
+            class:invalid={validationErrors.title}
+        />
+        {#if validationErrors.title}
+            <span class="error-text">{validationErrors.title}</span>
+        {/if}
     </div>
 
     <div class="form-row">
         <div class="form-group">
             <label for="date">Date</label>
-            <input type="date" id="date" bind:value={formData.Date} required disabled={isSubmitting} />
+            <input 
+                type="date" 
+                id="date" 
+                bind:value={formData.dateTime} 
+                required 
+                disabled={isSubmitting}
+                oninput={() => clearError('dateTime')}
+                class:invalid={validationErrors.dateTime}
+            />
+            {#if validationErrors.dateTime}
+                <span class="error-text">{validationErrors.dateTime}</span>
+            {/if}
         </div>
 
         <div class="form-group">
             <label for="capacity">Capacity</label>
-            <input type="number" id="capacity" bind:value={formData.Capacity} required min="1" disabled={isSubmitting} />
+            <input 
+                type="number" 
+                id="capacity" 
+                bind:value={formData.capacity} 
+                required 
+                min="1" 
+                disabled={isSubmitting}
+                oninput={() => clearError('capacity')}
+                class:invalid={validationErrors.capacity}
+            />
+            {#if validationErrors.capacity}
+                <span class="error-text">{validationErrors.capacity}</span>
+            {/if}
         </div>
     </div>
 
     <div class="form-group">
         <label for="category">Category</label>
-        <select id="category" bind:value={formData.Category} disabled={isSubmitting}>
+        <select 
+            id="category" 
+            bind:value={formData.category} 
+            disabled={isSubmitting}
+            onchange={() => clearError('category')}
+            class:invalid={validationErrors.category}
+        >
             <option value="Career">Career</option>
             <option value="Networking">Networking</option>
             <option value="Social">Social</option>
             <option value="Mentorship">Mentorship</option>
         </select>
+        {#if validationErrors.category}
+            <span class="error-text">{validationErrors.category}</span>
+        {/if}
     </div>
 
    <div class="form-actions">
@@ -212,6 +362,18 @@
         border-radius: 4px;
         font-size: 1rem;
         outline-color: var(--primary-color);
+    }
+    
+    /* NEW: Invalid input styling */
+    input.invalid, select.invalid {
+        border-color: #d32f2f;
+        background-color: #ffebee;
+    }
+    
+    .error-text {
+        color: #d32f2f;
+        font-size: 0.8rem;
+        margin-top: 4px;
     }
 
     .form-actions {

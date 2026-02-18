@@ -1,6 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import EventForm from '$lib/components/events/EventForm.svelte';
+    import { API_ENDPOINTS } from '$lib/config';
 
     let currentMode = 'create'; // can be 'create' or 'edit'
 
@@ -12,15 +13,15 @@
     // 2. Fetch the existing events as soon as the admin page loads
     onMount(async () => {
         try {
-            const response = await fetch('https://your-api-gateway-url.amazonaws.com/prod/events');
+            const response = await fetch(API_ENDPOINTS.events);
             if (!response.ok) throw new Error('Failed to fetch events');
             allEvents = await response.json();
         } catch (error) {
             // Demo Fallback: Load mock data if AWS isn't connected yet
             allEvents = [
-                { ID: "101", Title: "Resume Workshop", Date: "2026-05-18", Category: "Career", Capacity: 50 },
-                { ID: "102", Title: "AWS Guest Speaker", Date: "2026-05-20", Category: "Networking", Capacity: 150 },
-                { ID: "103", Title: "End of Year Tailgate", Date: "2026-05-20", Category: "Social", Capacity: 300 }
+                { eventId: "101", title: "Resume Workshop", dateTime: "2026-05-18T18:00:00Z", category: "Career", capacity: 50, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
+                { eventId: "102", title: "AWS Guest Speaker", dateTime: "2026-05-20T18:00:00Z", category: "Networking", capacity: 150, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
+                { eventId: "103", title: "End of Year Tailgate", dateTime: "2026-05-20T18:00:00Z", category: "Social", capacity: 300, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" }
             ];
         } finally {
             isLoading = false;
@@ -28,7 +29,7 @@
     });
 
     // 3. THICK CLIENT LOGIC: Reactively find the full event object when the dropdown changes
-    $: eventToEdit = allEvents.find(event => event.ID === selectedEventId);
+    $: eventToEdit = allEvents.find(event => event.eventId === selectedEventId);
 
 </script>
 
@@ -64,7 +65,7 @@
                 <select id="eventSelect" bind:value={selectedEventId}>
                     <option value="" disabled>-- Choose an Event --</option>
                     {#each allEvents as event}
-                        <option value={event.ID}>{event.Title} ({event.Date})</option>
+                        <option value={event.eventId}>{event.title} ({event.dateTime})</option>
                     {/each}
                 </select>
             {/if}

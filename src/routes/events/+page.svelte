@@ -3,6 +3,7 @@
     import { onMount } from 'svelte';
     import EventCard from '$lib/components/events/EventCard.svelte';
     import FilterBar from '$lib/components/events/FilterBar.svelte';
+    import { API_ENDPOINTS } from '$lib/config';
 
     // 2. Setup our state variables
     let allEvents = []; // This starts empty now!
@@ -18,7 +19,7 @@
     onMount(async () => {
         try {
             // Placeholder URL: You will swap this with your real AWS API Gateway URL later!
-            const response = await fetch('https://your-api-gateway-url.amazonaws.com/prod/events');
+            const response = await fetch(API_ENDPOINTS.events);
             
             if (!response.ok) {
                 throw new Error('Failed to fetch events from AWS');
@@ -33,9 +34,9 @@
             // THE DEMO SAFETY NET: If the API fails, show an error but load the mock data anyway!
             errorMessage = "⚠️ Could not connect to AWS. Loading offline mock data.";
             allEvents = [
-                { ID: "101", Title: "Resume Workshop", Date: "2026-05-18", Category: "Career", Capacity: 50 },
-                { ID: "102", Title: "AWS Guest Speaker", Date: "2026-05-20", Category: "Networking", Capacity: 150 },
-                { ID: "103", Title: "End of Year Tailgate", Date: "2026-05-20", Category: "Social", Capacity: 300 }
+                { eventId: "101", title: "Resume Workshop", dateTime: "2026-05-18T18:00:00Z", category: "Career", capacity: 50, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
+                { eventId: "102", title: "AWS Guest Speaker", dateTime: "2026-05-20T18:00:00Z", category: "Networking", capacity: 150, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
+                { eventId: "103", title: "End of Year Tailgate", dateTime: "2026-05-20T18:00:00Z", category: "Social", capacity: 300, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" }
             ];
         } finally {
             // Whether it succeeded or failed, we are done loading.
@@ -45,9 +46,10 @@
 
     // 4. THE THICK CLIENT LOGIC (Stays exactly the same!)
     $: filteredEvents = allEvents.filter(event => {
-        const matchesCategory = currentCategory === 'All' || event.Category === currentCategory;
-        const matchesDate = currentDate === '' || event.Date === currentDate;
-        const matchesSearch = event.Title.toLowerCase().includes(currentSearch.toLowerCase());
+        const matchesCategory = currentCategory === 'All' || event.category === currentCategory;
+        // Simple date check: check if the ISO string starts with the YYYY-MM-DD selected
+        const matchesDate = currentDate === '' || (event.dateTime && event.dateTime.startsWith(currentDate));
+        const matchesSearch = event.title.toLowerCase().includes(currentSearch.toLowerCase());
         
         return matchesCategory && matchesDate && matchesSearch;
     });

@@ -2,6 +2,7 @@
     // We export these so the main page can read what the user selected
     export let selectedCategory = 'All';
     export let selectedDate = '';
+    export let searchQuery = '';
     
     // We can pass in a list of unique categories to populate the dropdown
     export let categories = ['All', 'Career', 'Networking', 'Social'];
@@ -20,6 +21,16 @@
     <div class="filter-group">
         <label for="date">Date:</label>
         <input type="date" id="date" bind:value={selectedDate} />
+    </div>
+
+    <div class="filter-group">
+        <label for="search">Search:</label>
+        <input 
+            type="text" 
+            id="search" 
+            bind:value={searchQuery} 
+            placeholder="Search events..."
+        />
     </div>
 </div>
 
