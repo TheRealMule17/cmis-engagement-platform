@@ -76,18 +76,18 @@ const generateEvents = () => {
         const currentRSVPs = Math.floor(Math.random() * (capacity + 1));
 
         const event = {
-            EventID: uuidv4(),
-            Title: template.title,
-            Date: getFutureDate(90), // Next 3 months
-            Category: template.category,
-            Capacity: capacity,
-            Description: template.desc,
-            Location: getRandom(LOCATIONS),
-            CurrentRSVPs: currentRSVPs,
-            Version: 1,
-            Status: "Active",
-            CreatedAt: new Date().toISOString(),
-            CreatedBy: "system-seed"
+            eventId: uuidv4(),      // Changed from EventID
+            title: template.title,  // Changed from Title
+            dateTime: getFutureDate(90), // Changed from Date
+            category: template.category, // Changed from Category
+            capacity: capacity,     // Changed from Capacity
+            description: template.desc, // Changed from Description
+            location: getRandom(LOCATIONS), // Changed from Location
+            rsvpCount: currentRSVPs, // Changed from CurrentRSVPs
+            version: 1,
+            status: "Active",
+            createdAt: new Date().toISOString(), // Changed from CreatedAt
+            createdBy: "system-seed" // Changed from CreatedBy
         };
         events.push(event);
     });

@@ -3,35 +3,72 @@
     export let event;
     
     // NEW: Local state for UI simulation
+    import { API_ENDPOINTS } from '$lib/config';
+
+    // This tells the component to expect an object called "event" to be passed into it
+    export let event;
+    // NEW: Callback to refresh parent component after successful RSVP
+    export let onRsvpSuccess = null;
+    
+    // NEW: Local state for UI simulation
     let isRsvping = false;
-    let hasRsvped = false;
+    let hasRsvped = false; // In a real app, we'd check if the user ID is in the RSVP list
     let errorMessage = '';
-    let localRsvpCount = event.rsvpCount || 0;
+    // We trust the backend now, but for immediate UI feedback we can increment local first
+    // or just wait for the refresh. Let's trust the prop updates from refresh.
+    // Actually, for better UX, let's keep local state for immediate feedback until refresh.
     
     // NEW: Handle the RSVP action locally
     async function handleRsvp() {
         if (hasRsvped) return;
         
-        if (localRsvpCount >= event.capacity) {
-            errorMessage = "Sorry, this event is full.";
-            setTimeout(() => errorMessage = '', 3000);
-            return;
-        }
-
         isRsvping = true;
         errorMessage = '';
         
-        // Simulating network request delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Update local state to show it worked
-        localRsvpCount += 1;
-        hasRsvped = true;
-        isRsvping = false;
-        
-        // Reset success state after 3 seconds so they can see the button change back? 
-        // Actually, usually RSVP is permanent for the session in a demo.
-        // We'll leave it as "RSVP'd" unless you refresh.
+        try {
+            // Simulated User ID for Phase 1 (since we don't have Auth yet)
+            // In a real app, the token would handle this.
+            const tempUserId = 'dev-user-' + Date.now();
+
+            const response = await fetch(API_ENDPOINTS.rsvp(event.eventId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': tempUserId 
+                },
+                body: JSON.stringify({}) // Body can be empty if userId is in header/auth
+            });
+
+            if (!response.ok) {
+                // Handle specific error codes
+                if (response.status === 409) {
+                    const errData = await response.json();
+                    if (errData.error === 'EVENT_FULL') {
+                        throw new Error("This event is at full capacity");
+                    } else if (errData.error === 'ALREADY_RSVPED') {
+                        throw new Error("You've already RSVP'd to this event");
+                    }
+                } else if (response.status === 404) {
+                     throw new Error("Event not found");
+                }
+                
+                throw new Error('RSVP failed. Please try again.');
+            }
+
+            // Success!
+            hasRsvped = true;
+            
+            // Trigger refresh in parent to get updated count from DB
+            if (onRsvpSuccess) {
+                onRsvpSuccess(); 
+            }
+
+        } catch (error) {
+            console.error("RSVP Error:", error);
+            errorMessage = error.message || "Failed to RSVP";
+        } finally {
+            isRsvping = false;
+        }
     }
 </script>
 
@@ -46,15 +83,15 @@
     <div class="card-footer">
         <div class="capacity-info">
             <span class="capacity-text">
-                {localRsvpCount} / {event.capacity} attending
-                {#if localRsvpCount >= event.capacity}
+                {event.rsvpCount || 0} / {event.capacity} attending
+                {#if (event.rsvpCount || 0) >= event.capacity}
                     <span class="full-badge">(FULL)</span>
                 {/if}
             </span>
             <div class="capacity-bar">
                 <div 
                     class="capacity-fill" 
-                    style="width: {Math.min((localRsvpCount / event.capacity) * 100, 100)}%; background-color: {localRsvpCount >= event.capacity ? 'var(--secondary-color)' : 'var(--primary-color)'}"
+                    style="width: {Math.min(((event.rsvpCount || 0) / event.capacity) * 100, 100)}%; background-color: {(event.rsvpCount || 0) >= event.capacity ? 'var(--secondary-color)' : 'var(--primary-color)'}"
                 ></div>
             </div>
             
@@ -69,13 +106,13 @@
         <button 
             class="rsvp-btn" 
             onclick={handleRsvp} 
-            disabled={isRsvping || hasRsvped || localRsvpCount >= event.capacity}
+            disabled={isRsvping || hasRsvped || (event.rsvpCount || 0) >= event.capacity}
         >
             {#if isRsvping}
                 Processing...
             {:else if hasRsvped}
                 RSVP'd ✓
-            {:else if localRsvpCount >= event.capacity}
+            {:else if (event.rsvpCount || 0) >= event.capacity}
                 Event Full
             {:else}
                 RSVP Now

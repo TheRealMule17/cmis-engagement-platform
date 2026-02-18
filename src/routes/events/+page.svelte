@@ -16,9 +16,10 @@
     let errorMessage = '';
 
     // 3. The Fetch Logic (Runs automatically when the page first loads)
-    onMount(async () => {
+    async function fetchEvents() {
+        isLoading = true;
+        errorMessage = '';
         try {
-            // Placeholder URL: You will swap this with your real AWS API Gateway URL later!
             const response = await fetch(API_ENDPOINTS.events);
             
             if (!response.ok) {
@@ -30,19 +31,21 @@
             
         } catch (error) {
             console.error("API Error:", error);
-            
-            // THE DEMO SAFETY NET: If the API fails, show an error but load the mock data anyway!
-            errorMessage = "⚠️ Could not connect to AWS. Loading offline mock data.";
-            allEvents = [
-                { eventId: "101", title: "Resume Workshop", dateTime: "2026-05-18T18:00:00Z", category: "Career", capacity: 50, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
-                { eventId: "102", title: "AWS Guest Speaker", dateTime: "2026-05-20T18:00:00Z", category: "Networking", capacity: 150, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
-                { eventId: "103", title: "End of Year Tailgate", dateTime: "2026-05-20T18:00:00Z", category: "Social", capacity: 300, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" }
-            ];
+            errorMessage = "⚠️ Could not connect to AWS. Please check your network connection.";
+            allEvents = []; // No mock data fallback
         } finally {
-            // Whether it succeeded or failed, we are done loading.
             isLoading = false;
         }
+    }
+
+    onMount(() => {
+        fetchEvents();
     });
+
+    // Callback to refresh events after RSVP
+    function refreshEvents() {
+        fetchEvents();
+    }
 
     // 4. THE THICK CLIENT LOGIC (Stays exactly the same!)
     $: filteredEvents = allEvents.filter(event => {
@@ -77,7 +80,7 @@
 
     <div class="catalog-grid">
         {#each filteredEvents as singleEvent}
-            <EventCard event={singleEvent} />
+            <EventCard event={singleEvent} onRsvpSuccess={refreshEvents} />
         {/each}
         
         {#if filteredEvents.length === 0}

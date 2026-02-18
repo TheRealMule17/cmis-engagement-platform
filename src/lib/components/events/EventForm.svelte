@@ -162,11 +162,9 @@
         } catch (error) {
             console.error("API Error:", error);
             
-            // 5. THE DEMO SAFETY NET
-            // Because your API URL is fake right now, the fetch will purposely fail. 
-            // We catch it here to show a mock success message for your Phase 1 demo!
+            // Show real error message from AWS or network
             submitStatus = 'error';
-            statusMessage = `⚠️ AWS API not connected yet. (Simulated ${isEditing ? 'Update' : 'Create'} for: "${formData.title}")`;
+            statusMessage = `Database Error: Could not save "${formData.title}". Please try again.`;
         } finally {
             // 6. Unlock the form
             isSubmitting = false;
@@ -204,12 +202,10 @@
         } catch (error) {
             console.error("API Error:", error);
             
-            // THE DEMO SAFETY NET
-            submitStatus = 'success'; // Showing green for the demo
-            statusMessage = `⚠️ AWS API not connected yet. (Simulated Delete for: "${formData.title}")`;
-            
-            // Still clear the form so the demo looks realistic
-            formData = { eventId: '', title: '', dateTime: '', category: 'Career', capacity: 50 };
+            // Show real error message
+            submitStatus = 'error';
+            statusMessage = `Database Error: Could not delete "${formData.title}". Please try again.`;
+            // DO NOT clear formData on error
         } finally {
             isSubmitting = false;
         }

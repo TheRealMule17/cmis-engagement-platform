@@ -12,17 +12,15 @@
 
     // 2. Fetch the existing events as soon as the admin page loads
     onMount(async () => {
+        isLoading = true;
         try {
             const response = await fetch(API_ENDPOINTS.events);
             if (!response.ok) throw new Error('Failed to fetch events');
             allEvents = await response.json();
         } catch (error) {
-            // Demo Fallback: Load mock data if AWS isn't connected yet
-            allEvents = [
-                { eventId: "101", title: "Resume Workshop", dateTime: "2026-05-18T18:00:00Z", category: "Career", capacity: 50, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
-                { eventId: "102", title: "AWS Guest Speaker", dateTime: "2026-05-20T18:00:00Z", category: "Networking", capacity: 150, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" },
-                { eventId: "103", title: "End of Year Tailgate", dateTime: "2026-05-20T18:00:00Z", category: "Social", capacity: 300, rsvpCount: 0, createdAt: "2026-02-18T12:00:00Z", updatedAt: "2026-02-18T12:00:00Z" }
-            ];
+            console.error("API Error:", error);
+            // Remove mock data fallback
+            allEvents = [];
         } finally {
             isLoading = false;
         }
