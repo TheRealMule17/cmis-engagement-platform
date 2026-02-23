@@ -12,6 +12,8 @@ export { API_BASE_URL };
 export const API_ENDPOINTS = {
     ping: `${API_BASE_URL}/ping`,
     events: `${API_BASE_URL}/events`,
+    eventsPast: (yearMonth) => `${API_BASE_URL}/events/past?yearMonth=${encodeURIComponent(yearMonth)}`,
     eventById: (id) => `${API_BASE_URL}/events/${id}`,
     rsvp: (id) => `${API_BASE_URL}/events/${id}/rsvp`,
+    waitlist: (id) => `${API_BASE_URL}/events/${id}/waitlist`,
 };

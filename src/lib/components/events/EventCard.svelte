@@ -10,7 +10,9 @@
     
     // NEW: Local state for UI simulation
     let isRsvping = false;
-    let hasRsvped = false; // In a real app, we'd check if the user ID is in the RSVP list
+    let hasRsvped = false;
+    let onWaitlist = false;
+    let isJoiningWaitlist = false;
     let errorMessage = '';
     // We trust the backend now, but for immediate UI feedback we can increment local first
     // or just wait for the refresh. Let's trust the prop updates from refresh.
@@ -38,18 +40,19 @@
             });
 
             if (!response.ok) {
-                // Handle specific error codes
                 if (response.status === 409) {
-                    const errData = await response.json();
+                    const errData = await response.json().catch(() => ({}));
                     if (errData.error === 'EVENT_FULL') {
-                        throw new Error("This event is at full capacity");
-                    } else if (errData.error === 'ALREADY_RSVPED') {
+                        const e = new Error("This event is at full capacity. You can join the waitlist.");
+                        e.code = 'EVENT_FULL';
+                        throw e;
+                    }
+                    if (errData.error === 'ALREADY_RSVPED') {
                         throw new Error("You've already RSVP'd to this event");
                     }
-                } else if (response.status === 404) {
-                     throw new Error("Event not found");
+                    throw new Error(errData.message || "Event at capacity");
                 }
-                
+                if (response.status === 404) throw new Error("Event not found");
                 throw new Error('RSVP failed. Please try again.');
             }
 
@@ -64,8 +67,38 @@
         } catch (error) {
             console.error("RSVP Error:", error);
             errorMessage = error.message || "Failed to RSVP";
+            if (error.code === 'EVENT_FULL') {
+                // Leave errorMessage so user sees "join waitlist" option
+            }
         } finally {
             isRsvping = false;
+        }
+    }
+
+    async function handleJoinWaitlist() {
+        if (onWaitlist) return;
+        isJoiningWaitlist = true;
+        errorMessage = '';
+        try {
+            const tempUserId = 'dev-user-' + Date.now();
+            const response = await fetch(API_ENDPOINTS.waitlist(event.eventId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': tempUserId
+                },
+                body: JSON.stringify({})
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.message || 'Failed to join waitlist');
+            }
+            onWaitlist = true;
+            if (onRsvpSuccess) onRsvpSuccess();
+        } catch (e) {
+            errorMessage = e.message || 'Failed to join waitlist';
+        } finally {
+            isJoiningWaitlist = false;
         }
     }
 </script>
@@ -96,26 +129,46 @@
              {#if hasRsvped}
                 <div class="success-message">You're going! 🎉</div>
             {/if}
+            {#if onWaitlist}
+                <div class="waitlist-message">You're on the waitlist. We'll notify you if a spot opens.</div>
+            {/if}
             {#if errorMessage}
                 <div class="error-message">{errorMessage}</div>
             {/if}
         </div>
         
-        <button 
-            class="rsvp-btn" 
-            onclick={handleRsvp} 
-            disabled={isRsvping || hasRsvped || (event.rsvpCount || 0) >= event.capacity}
-        >
-            {#if isRsvping}
-                Processing...
-            {:else if hasRsvped}
-                RSVP'd ✓
-            {:else if (event.rsvpCount || 0) >= event.capacity}
-                Event Full
-            {:else}
-                RSVP Now
+        <div class="actions">
+            <button 
+                class="rsvp-btn" 
+                onclick={handleRsvp} 
+                disabled={isRsvping || hasRsvped || (event.rsvpCount || 0) >= event.capacity}
+            >
+                {#if isRsvping}
+                    Processing...
+                {:else if hasRsvped}
+                    RSVP'd ✓
+                {:else if (event.rsvpCount || 0) >= event.capacity}
+                    Event Full
+                {:else}
+                    RSVP Now
+                {/if}
+            </button>
+            {#if (event.rsvpCount || 0) >= event.capacity && !hasRsvped}
+                <button 
+                    class="waitlist-btn"
+                    onclick={handleJoinWaitlist}
+                    disabled={isJoiningWaitlist || onWaitlist}
+                >
+                    {#if onWaitlist}
+                        On waitlist ✓
+                    {:else if isJoiningWaitlist}
+                        Joining...
+                    {:else}
+                        Join waitlist
+                    {/if}
+                </button>
             {/if}
-        </button>
+        </div>
     </div>
 </div>
 
@@ -226,5 +279,37 @@
 
     .rsvp-btn:hover {
         opacity: 0.8;
+    }
+
+    .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .waitlist-btn {
+        background-color: var(--primary-color);
+        color: var(--primary-text);
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .waitlist-btn:hover:not(:disabled) {
+        opacity: 0.9;
+    }
+
+    .waitlist-btn:disabled {
+        opacity: 0.7;
+        cursor: default;
+    }
+
+    .waitlist-message {
+        font-size: 0.8rem;
+        color: var(--primary-color);
+        font-weight: bold;
     }
 </style>

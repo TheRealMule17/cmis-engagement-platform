@@ -5,6 +5,20 @@
     import FilterBar from '$lib/components/events/FilterBar.svelte';
     import { API_ENDPOINTS } from '$lib/config';
 
+    // Normalize event from API (handles both camelCase and PascalCase backends)
+    function normalizeEvent(ev) {
+        return {
+            eventId: ev.eventId ?? ev.EventID,
+            title: ev.title ?? ev.Title,
+            dateTime: ev.dateTime ?? ev.Date,
+            category: ev.category ?? ev.Category,
+            capacity: ev.capacity ?? ev.Capacity ?? 0,
+            rsvpCount: ev.rsvpCount ?? ev.CurrentRSVPs ?? ev.currentRSVPs ?? 0,
+            description: ev.description ?? ev.Description,
+            location: ev.location ?? ev.Location,
+        };
+    }
+
     // 2. Setup our state variables
     let allEvents = []; // This starts empty now!
     let currentCategory = 'All';
@@ -26,8 +40,10 @@
                 throw new Error('Failed to fetch events from AWS');
             }
             
-            // If successful, populate the array with the real database items
-            allEvents = await response.json();
+            const data = await response.json();
+            // Support both SAM shape { events, count } and array shape; normalize field names
+            const raw = Array.isArray(data) ? data : (data.events || []);
+            allEvents = raw.map(normalizeEvent);
             
         } catch (error) {
             console.error("API Error:", error);

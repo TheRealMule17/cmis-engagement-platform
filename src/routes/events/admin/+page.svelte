@@ -10,16 +10,30 @@
     let isLoading = true;
     let selectedEventId = '';
 
+    function normalizeEvent(ev) {
+        return {
+            eventId: ev.eventId ?? ev.EventID,
+            title: ev.title ?? ev.Title,
+            dateTime: ev.dateTime ?? ev.Date,
+            category: ev.category ?? ev.Category,
+            capacity: ev.capacity ?? ev.Capacity ?? 0,
+            rsvpCount: ev.rsvpCount ?? ev.CurrentRSVPs ?? ev.currentRSVPs ?? 0,
+            description: ev.description ?? ev.Description,
+            location: ev.location ?? ev.Location,
+        };
+    }
+
     // 2. Fetch the existing events as soon as the admin page loads
     onMount(async () => {
         isLoading = true;
         try {
             const response = await fetch(API_ENDPOINTS.events);
             if (!response.ok) throw new Error('Failed to fetch events');
-            allEvents = await response.json();
+            const data = await response.json();
+            const raw = Array.isArray(data) ? data : (data.events || []);
+            allEvents = raw.map(normalizeEvent);
         } catch (error) {
             console.error("API Error:", error);
-            // Remove mock data fallback
             allEvents = [];
         } finally {
             isLoading = false;

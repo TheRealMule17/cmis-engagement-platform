@@ -32,25 +32,25 @@ export const handler = async (event) => {
             return { statusCode: 404, headers, body: JSON.stringify({ message: "Event not found" }) };
         }
 
-        // Get RSVPs
+        // Get RSVPs (only Confirmed count toward capacity)
         const queryCommand = new QueryCommand({
             TableName: rsvpsTableName,
             KeyConditionExpression: "EventID = :eventId",
-            ExpressionAttributeValues: {
-                ":eventId": eventId
-            }
+            ExpressionAttributeValues: { ":eventId": eventId },
         });
         const rsvpResponse = await docClient.send(queryCommand);
-        const rsvps = rsvpResponse.Items ? rsvpResponse.Items.map(item => item.UserID) : [];
+        const allRsvps = rsvpResponse.Items || [];
+        const confirmed = allRsvps.filter((r) => r.Status === "Confirmed");
+        const rsvps = confirmed.map((item) => item.UserID);
 
         return {
             statusCode: 200,
             headers,
             body: JSON.stringify({
                 event: eventItem,
-                rsvps: rsvps,
-                rsvpCount: rsvps.length
-            })
+                rsvps,
+                rsvpCount: rsvps.length,
+            }),
         };
     } catch (error) {
         console.error("Error fetching event:", error);
