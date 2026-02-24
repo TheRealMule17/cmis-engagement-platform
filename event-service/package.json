@@ -4,13 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "powershell Compress-Archive -Force -Path src/index.js,node_modules -DestinationPath dist/lambda.zip"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.992.0",
+    "@aws-sdk/client-sqs": "^3.996.0",
     "@aws-sdk/lib-dynamodb": "^3.992.0"
   }
 }

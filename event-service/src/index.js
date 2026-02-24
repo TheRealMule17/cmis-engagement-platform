@@ -8,6 +8,7 @@ const {
   UpdateCommand,
   DeleteCommand,
   GetCommand,
+  QueryCommand, 
   TransactWriteCommand
 } = require("@aws-sdk/lib-dynamodb");
 const crypto = require("crypto");
@@ -16,7 +17,8 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
  
 const EVENTS_TABLE = process.env.EVENTS_TABLE;
 const RSVPS_TABLE = process.env.RSVPS_TABLE;
- 
+const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
+const sqs = new SQSClient({});
 function response(statusCode, bodyObj) {
   return {
     statusCode,
@@ -24,7 +26,7 @@ function response(statusCode, bodyObj) {
       "content-type": "application/json",
       "access-control-allow-origin": "*",
       "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
-      "access-control-allow-headers": "Content-Type,Authorization,X-User-Id"
+      "access-control-allow-headers": "Content-Type,Authorization,X-User-Id,x-user-id"
     },
     body: bodyObj === undefined ? "" : JSON.stringify(bodyObj)
   };
@@ -78,11 +80,17 @@ exports.handler = async (event) => {
   let segments = path.split("/").filter(Boolean);
   segments = stripStagePrefix(event, segments);
  
-  // GET /events
-  if (method === "GET" && segments.length === 1 && segments[0] === "events") {
-    const resp = await ddb.send(new ScanCommand({ TableName: EVENTS_TABLE }));
-    return response(200, resp.Items || []);
-  }
+// GET /events - Query via GSI 
+if (method === "GET" && segments.length === 1 && segments[0] === "events") {
+  const resp = await ddb.send(new QueryCommand({
+    TableName: EVENTS_TABLE,
+    IndexName: "StatusDateIndex",
+    KeyConditionExpression: "#s = :active",
+    ExpressionAttributeNames: { "#s": "status" },
+    ExpressionAttributeValues: { ":active": "ACTIVE" }
+  }));
+  return response(200, resp.Items || []);
+}
  
   // POST /events (create)
   if (method === "POST" && segments.length === 1 && segments[0] === "events") {
@@ -103,6 +111,7 @@ exports.handler = async (event) => {
       category,
       capacity: capNum,
       rsvpCount: 0,
+      status: "ACTIVE",  
       createdAt: now,
       updatedAt: now
     };
@@ -164,12 +173,22 @@ exports.handler = async (event) => {
     return response(200, { status: "ok" });
   }
  
-  // DELETE /events/{eventId}
-  if (method === "DELETE" && segments.length === 2 && segments[0] === "events") {
-    const eventId = segments[1];
-    await ddb.send(new DeleteCommand({ TableName: EVENTS_TABLE, Key: { eventId } }));
-    return response(200, { status: "ok" });
-  }
+// DELETE /events/{eventId} - soft delete with status=CANCELED
+if (method === "DELETE" && segments.length === 2 && segments[0] === "events") {
+  const eventId = segments[1];
+  const now = new Date().toISOString();
+
+  await ddb.send(new UpdateCommand({
+    TableName: EVENTS_TABLE,
+    Key: { eventId },
+    UpdateExpression: "SET #s = :canceled, updatedAt = :u",
+    ExpressionAttributeNames: { "#s": "status" },
+    ExpressionAttributeValues: { ":canceled": "CANCELED", ":u": now },
+    ConditionExpression: "attribute_exists(eventId)"
+  }));
+
+  return response(200, { status: "ok" });
+}
  
   // POST /events/{eventId}/rsvp
   if (method === "POST" && segments.length === 3 && segments[0] === "events" && segments[2] === "rsvp") {
@@ -259,6 +278,51 @@ exports.handler = async (event) => {
       });
     }
   }
- 
+// POST /events/{eventId}/waitlist (join waitlist)
+if (method === "POST" && segments.length === 3 && segments[0] === "events" && segments[2] === "waitlist") {
+  const eventId = segments[1];
+  const userId = getUserId(event);
+  const now = new Date().toISOString();
+  const joinedAtUserId = `${now}#${userId}`;  // combined range key
+
+  await sqs.send(new SendMessageCommand({
+    QueueUrl: process.env.WAITLIST_QUEUE_URL,
+    MessageBody: JSON.stringify({ eventId, userId }),
+    MessageGroupId: eventId,
+    MessageDeduplicationId: `${eventId}-${userId}`
+  }));
+
+  await ddb.send(new PutCommand({
+    TableName: process.env.WAITLIST_TABLE,
+    Item: { eventId, joinedAtUserId, userId, createdAt: now },
+    ConditionExpression: "attribute_not_exists(eventId) AND attribute_not_exists(joinedAtUserId)"
+  }));
+
+  return response(200, { status: "ok" });
+}
+
+// DELETE /events/{eventId}/waitlist (leave waitlist)
+if (method === "DELETE" && segments.length === 3 && segments[0] === "events" && segments[2] === "waitlist") {
+  const eventId = segments[1];
+  const userId = getUserId(event);
+
+  // Query to find the user's waitlist entry first
+  const { QueryCommand } = require("@aws-sdk/lib-dynamodb");
+  const result = await ddb.send(new QueryCommand({
+    TableName: process.env.WAITLIST_TABLE,
+    KeyConditionExpression: "eventId = :eid",
+    FilterExpression: "userId = :uid",
+    ExpressionAttributeValues: { ":eid": eventId, ":uid": userId }
+  }));
+
+  if (result.Items?.length > 0) {
+    await ddb.send(new DeleteCommand({
+      TableName: process.env.WAITLIST_TABLE,
+      Key: { eventId, joinedAtUserId: result.Items[0].joinedAtUserId }
+    }));
+  }
+
+  return response(200, { status: "ok" });
+}
   return response(404, { error: "NOT_FOUND", method, path });
 };

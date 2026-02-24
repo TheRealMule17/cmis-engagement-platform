@@ -2,7 +2,13 @@ version = 0.1
 [default]
 [default.deploy]
 [default.deploy.parameters]
-stack_name = "cmis-events-12thman"
+stack_name = "twelfth-man-waitlist-demo"
 region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
+resolve_s3 = true
+s3_prefix = "twelfth-man-waitlist-demo"
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-1"

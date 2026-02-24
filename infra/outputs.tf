@@ -9,3 +9,15 @@ output "events_table_name" {
 output "rsvps_table_name" {
   value = aws_dynamodb_table.rsvps.name
 }
+
+output "waitlist_table_name" {
+  value = aws_dynamodb_table.waitlist.name
+}
+
+output "past_events_table_name" {
+  value = aws_dynamodb_table.past_events.name
+}
+
+output "waitlist_queue_url" {
+  value = aws_sqs_queue.waitlist_queue.url
+}

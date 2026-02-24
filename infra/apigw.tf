@@ -21,7 +21,7 @@ locals {
   cors_integration_response_params = {
     "method.response.header.Access-Control-Allow-Origin"  = "'*'"
     "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
-    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-User-Id,x-user-id'"
   }
 }
 
@@ -153,12 +153,17 @@ resource "aws_api_gateway_deployment" "deploy" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
   triggers = {
-    redeploy = sha1(jsonencode([
-      aws_api_gateway_integration.any_root.id,
-      aws_api_gateway_integration.any_proxy.id,
-      aws_api_gateway_integration.options_root.id,
-      aws_api_gateway_integration.options_proxy.id
-    ]))
+  redeploy = sha1(jsonencode([
+    aws_api_gateway_integration.any_root.id,
+    aws_api_gateway_integration.any_proxy.id,
+    aws_api_gateway_integration.options_root.id,
+    aws_api_gateway_integration.options_proxy.id,
+    aws_api_gateway_integration_response.options_root_200.id,
+    aws_api_gateway_integration_response.options_proxy_200.id,
+  ]))
+}
+  lifecycle {
+    create_before_destroy = true
   }
 
   depends_on = [
@@ -174,4 +179,22 @@ resource "aws_api_gateway_stage" "stage" {
   deployment_id = aws_api_gateway_deployment.deploy.id
   stage_name    = var.stage_name
 }
+resource "aws_api_gateway_gateway_response" "cors_4xx" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  response_type = "DEFAULT_4XX"
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-User-Id,x-user-id'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+  }
+}
 
+resource "aws_api_gateway_gateway_response" "cors_5xx" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  response_type = "DEFAULT_5XX"
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
+    "gatewayresponse.header.Access-Control-Allow-Headers" = "'Content-Type,Authorization,X-User-Id,x-user-id'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PUT,DELETE,OPTIONS'"
+  }
+}

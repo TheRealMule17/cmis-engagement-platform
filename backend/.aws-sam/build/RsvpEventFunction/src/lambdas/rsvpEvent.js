@@ -52,7 +52,7 @@ export const handler = async (event) => {
             const updateEventCommand = new UpdateCommand({
                 TableName: eventsTableName,
                 Key: { EventID: eventId },
-                UpdateExpression: "SET CurrentRSVPs = CurrentRSVPs + :inc, Version = Version + :inc",
+                UpdateExpression: "SET CurrentRSVPs = CurrentRSVPs + :inc",
                 ConditionExpression: "CurrentRSVPs < :capacity AND attribute_exists(EventID) AND #status = :activeStatus",
                 ExpressionAttributeNames: {
                     "#status": "Status"
@@ -99,14 +99,15 @@ export const handler = async (event) => {
 
         } catch (err) {
             if (err.name === 'ConditionalCheckFailedException') {
-                // This means either:
-                // 1. Event is full (CurrentRSVPs >= Capacity)
-                // 2. Event is not Active
-                // 3. Event does not exist (though we checked earlier, it might have been deleted)
+                const isFull = eventItem.CurrentRSVPs >= eventItem.Capacity;
                 return {
                     statusCode: 409,
                     headers,
-                    body: JSON.stringify({ message: "This event is at full capacity or unavailable" })
+                    body: JSON.stringify({
+                        message: isFull ? "This event is at full capacity" : "Event unavailable",
+                        error: isFull ? "EVENT_FULL" : "UNAVAILABLE",
+                        eventId
+                    })
                 };
             }
             throw err; // Re-throw other errors to be caught by outer catch

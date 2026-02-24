@@ -20,6 +20,7 @@
             rsvpCount: ev.rsvpCount ?? ev.CurrentRSVPs ?? ev.currentRSVPs ?? 0,
             description: ev.description ?? ev.Description,
             location: ev.location ?? ev.Location,
+            status: ev.status ?? 'ACTIVE',
         };
     }
 
@@ -41,7 +42,8 @@
     });
 
     // 3. THICK CLIENT LOGIC: Reactively find the full event object when the dropdown changes
-    $: eventToEdit = allEvents.find(event => event.eventId === selectedEventId);
+    $: eventToEdit = selectedEventId ? allEvents.find(event => event.eventId === selectedEventId) ?? null : null;
+
 
 </script>
 
@@ -83,7 +85,7 @@
             {/if}
         </div>
 
-        {#if selectedEventId && eventToEdit}
+        {#if eventToEdit}
             {#key selectedEventId}
                 <EventForm initialData={eventToEdit} />
             {/key}

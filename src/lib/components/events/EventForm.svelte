@@ -6,7 +6,8 @@
         title: '',
         dateTime: '',
         category: 'Career',
-        capacity: 50
+        capacity: 50,
+        status: 'ACTIVE'
     };
 
     let formData = { ...initialData };
@@ -214,6 +215,12 @@
 
 <form class="event-form" onsubmit={handleSubmit}>
     <h2 class="form-title">{isEditing ? 'Edit Event' : 'Create New Event'}</h2>
+   
+    {#if isEditing}
+        <div class="status-badge {formData.status === 'CANCELED' ? 'canceled' : 'active'}">
+            Status: {formData.status ?? 'ACTIVE'}
+        </div>
+    {/if}
 
     {#if statusMessage}
         <div class="status-banner {submitStatus}">
@@ -295,7 +302,7 @@
    <div class="form-actions">
         {#if isEditing}
             <button type="button" class="delete-btn" onclick={handleDelete} disabled={isSubmitting}>
-                Delete Event
+                {formData.status === 'CANCELED' ? 'Already Canceled' : 'Cancel Event'}
             </button>
         {/if}
 
@@ -399,7 +406,21 @@
         opacity: 0.7;
     }
 
+
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: bold;
+        margin-bottom: 16px;
+    }
+    .status-badge.active { background-color: #e8f5e9; color: #2e7d32; }
+    .status-badge.canceled { background-color: #ffebee; color: #c62828; }
+
     /* NEW: Styling for the success/error banners */
+
+
     .status-banner {
         padding: 12px;
         border-radius: 4px;

@@ -18,3 +18,12 @@ variable "lambda_zip_path" {
   default = "../event-service/dist/lambda.zip"
 }
 
+variable "process_waitlist_zip_path" {
+  type    = string
+  default = "../backend/dist/processWaitlist.zip"
+}
+
+variable "archive_past_events_zip_path" {
+  type    = string
+  default = "../backend/dist/archivePastEvents.zip"
+}

@@ -48,3 +48,49 @@ resource "aws_iam_role_policy" "lambda_policy" {
     ]
   })
 }
+
+data "aws_iam_policy_document" "waitlist_past_events_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:Query",
+      "dynamodb:TransactWriteItems"
+    ]
+    resources = [
+      aws_dynamodb_table.events.arn,
+      "${aws_dynamodb_table.events.arn}/index/StatusDateIndex",
+      aws_dynamodb_table.rsvps.arn,
+      aws_dynamodb_table.waitlist.arn,
+      aws_dynamodb_table.past_events.arn
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "sqs:SendMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:GetQueueUrl",
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:ChangeMessageVisibility"
+    ]
+    resources = [
+      aws_sqs_queue.waitlist_queue.arn
+    ]
+  }
+}
+
+resource "aws_iam_policy" "waitlist_past_events" {
+  name   = "${var.project_name}-waitlist-past-events-${var.stage_name}"
+  policy = data.aws_iam_policy_document.waitlist_past_events_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "attach_waitlist_past_events" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.waitlist_past_events.arn
+}

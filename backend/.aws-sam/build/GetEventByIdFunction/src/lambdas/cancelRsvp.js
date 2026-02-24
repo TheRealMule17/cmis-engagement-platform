@@ -1,12 +1,15 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
+const sqs = new SQSClient({});
 
 export const handler = async (event) => {
     const eventsTableName = process.env.EVENTS_TABLE_NAME;
     const rsvpsTableName = process.env.RSVPS_TABLE_NAME;
+    const waitlistQueueUrl = process.env.WAITLIST_QUEUE_URL;
     const eventId = event.pathParameters.id;
     const userId = event.requestContext?.authorizer?.claims?.sub || "anonymous_user";
 
@@ -54,17 +57,15 @@ export const handler = async (event) => {
 
         await docClient.send(updateRsvpCommand);
 
-        // STEP 3: ATOMIC DECREMENT on Events table
-        // We only decrement if CurrentRSVPs > 0
+        // STEP 3: ATOMIC DECREMENT on Events table (no Version bump - optimistic locking only for admin updates)
         try {
             const updateEventCommand = new UpdateCommand({
                 TableName: eventsTableName,
                 Key: { EventID: eventId },
-                UpdateExpression: "SET CurrentRSVPs = CurrentRSVPs - :dec, Version = Version + :inc",
+                UpdateExpression: "SET CurrentRSVPs = CurrentRSVPs - :dec",
                 ConditionExpression: "CurrentRSVPs > :zero AND attribute_exists(EventID)",
                 ExpressionAttributeValues: {
                     ":dec": 1,
-                    ":inc": 1,
                     ":zero": 0
                 }
             });
@@ -74,13 +75,26 @@ export const handler = async (event) => {
         } catch (err) {
             if (err.name === 'ConditionalCheckFailedException') {
                 console.warn(`Could not decrement RSVP count for event ${eventId} (Count might be 0 already)`);
-                // We still consider this a success for the user as their RSVP is cancelled
             } else {
                 throw err;
             }
         }
 
-        // STEP 4: Return success
+        // STEP 4: Enqueue waitlist processing (FIFO) so one spot can be filled from waitlist
+        if (waitlistQueueUrl) {
+            try {
+                await sqs.send(new SendMessageCommand({
+                    QueueUrl: waitlistQueueUrl,
+                    MessageBody: JSON.stringify({ eventId }),
+                    MessageGroupId: eventId,
+                    MessageDeduplicationId: `${eventId}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                }));
+            } catch (sqsErr) {
+                console.warn("Failed to enqueue waitlist processing:", sqsErr);
+            }
+        }
+
+        // STEP 5: Return success
         return {
             statusCode: 204,
             headers,

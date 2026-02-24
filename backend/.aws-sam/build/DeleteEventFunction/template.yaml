@@ -19,9 +19,22 @@ Resources:
       AttributeDefinitions:
         - AttributeName: EventID
           AttributeType: S
+        - AttributeName: Status
+          AttributeType: S
+        - AttributeName: Date
+          AttributeType: S
       KeySchema:
         - AttributeName: EventID
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusDateIndex
+          KeySchema:
+            - AttributeName: Status
+              KeyType: HASH
+            - AttributeName: Date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -59,6 +72,60 @@ Resources:
         - Key: Team
           Value: 12thMan
 
+  # Waitlist: PK EventID, SK JoinedAtUserID (JoinedAt#UserID for FIFO order per event)
+  WaitlistTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub CMIS-Waitlist-${AWS::StackName}
+      AttributeDefinitions:
+        - AttributeName: EventID
+          AttributeType: S
+        - AttributeName: JoinedAtUserID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: EventID
+          KeyType: HASH
+        - AttributeName: JoinedAtUserID
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: Project
+          Value: CMIS
+        - Key: Team
+          Value: 12thMan
+
+  # Past events (partition by YearMonth for efficient query); never delete - archive only
+  PastEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub CMIS-PastEvents-${AWS::StackName}
+      AttributeDefinitions:
+        - AttributeName: YearMonth
+          AttributeType: S
+        - AttributeName: DateEventID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: YearMonth
+          KeyType: HASH
+        - AttributeName: DateEventID
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: Project
+          Value: CMIS
+        - Key: Team
+          Value: 12thMan
+
+  # FIFO queue for waitlist processing (one promotion per message, ordered per event)
+  WaitlistQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub CMIS-WaitlistQueue-${AWS::StackName}.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      MessageRetentionPeriod: 86400
+      VisibilityTimeout: 60
+
   # API Gateway
   CMISEventsAPI:
     Type: AWS::Serverless::Api
@@ -90,6 +157,45 @@ Resources:
             RestApiId: !Ref CMISEventsAPI
             Path: /events
             Method: GET
+
+  GetPastEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/getPastEvents.handler
+      Environment:
+        Variables:
+          PAST_EVENTS_TABLE_NAME: !Ref PastEventsTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref PastEventsTable
+      Events:
+        GetPastEvents:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CMISEventsAPI
+            Path: /events/past
+            Method: GET
+
+  ArchivePastEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/archivePastEvents.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME: !Ref EventsTable
+          PAST_EVENTS_TABLE_NAME: !Ref PastEventsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PastEventsTable
+      Events:
+        DailyArchive:
+          Type: Schedule
+          Properties:
+            Schedule: "cron(0 2 * * ? *)"
+            Description: Archive past events daily (2 AM UTC)
+            Enabled: true
 
   CreateEventFunction:
     Type: AWS::Serverless::Function
@@ -155,12 +261,9 @@ Resources:
       Environment:
         Variables:
           EVENTS_TABLE_NAME: !Ref EventsTable
-          RSVPS_TABLE_NAME: !Ref RSVPsTable
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EventsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref RSVPsTable
       Events:
         DeleteEvent:
           Type: Api
@@ -198,11 +301,19 @@ Resources:
         Variables:
           EVENTS_TABLE_NAME: !Ref EventsTable
           RSVPS_TABLE_NAME: !Ref RSVPsTable
+          WAITLIST_TABLE_NAME: !Ref WaitlistTable
+          WAITLIST_QUEUE_URL: !Ref WaitlistQueue
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EventsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref RSVPsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WaitlistTable
+        - Statement:
+            - Effect: Allow
+              Action: sqs:SendMessage
+              Resource: !GetAtt WaitlistQueue.Arn
       Events:
         CancelRsvp:
           Type: Api
@@ -210,6 +321,51 @@ Resources:
             RestApiId: !Ref CMISEventsAPI
             Path: /events/{id}/rsvp
             Method: DELETE
+
+  JoinWaitlistFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/joinWaitlist.handler
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME: !Ref EventsTable
+          WAITLIST_TABLE_NAME: !Ref WaitlistTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WaitlistTable
+      Events:
+        JoinWaitlist:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CMISEventsAPI
+            Path: /events/{id}/waitlist
+            Method: POST
+
+  ProcessWaitlistFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/processWaitlist.handler
+      Timeout: 60
+      Environment:
+        Variables:
+          EVENTS_TABLE_NAME: !Ref EventsTable
+          RSVPS_TABLE_NAME: !Ref RSVPsTable
+          WAITLIST_TABLE_NAME: !Ref WaitlistTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RSVPsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WaitlistTable
+      Events:
+        WaitlistQueueTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt WaitlistQueue.Arn
+            BatchSize: 1
 
 Outputs:
   ApiGatewayUrl:
