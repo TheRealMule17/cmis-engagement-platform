@@ -11,9 +11,10 @@ resource "aws_lambda_function" "event_api" {
 
   environment {
     variables = {
-      EVENTS_TABLE = aws_dynamodb_table.events.name
-      RSVPS_TABLE  = aws_dynamodb_table.rsvps.name
-      STAGE        = var.stage_name
+      EVENTS_TABLE       = aws_dynamodb_table.events.name
+      RSVPS_TABLE        = aws_dynamodb_table.rsvps.name
+      STAGE              = var.stage_name
+      WAITLIST_QUEUE_URL = aws_sqs_queue.waitlist_queue.id
     }
   }
 }

@@ -44,6 +44,19 @@ resource "aws_iam_role_policy" "lambda_policy" {
           aws_dynamodb_table.events.arn,
           aws_dynamodb_table.rsvps.arn
         ]
+      },
+      # SQS Permissions (Waitlist + DLQ)
+      {
+        Effect = "Allow",
+        Action = [
+          "sqs:SendMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl"
+        ],
+        Resource = [
+          aws_sqs_queue.waitlist_queue.arn,
+          aws_sqs_queue.waitlist_dlq.arn
+        ]
       }
     ]
   })
